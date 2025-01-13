@@ -47,3 +47,10 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+#own additions 
+in/
+!in/.gitkeep 
+out/EstData
+out/RData
+trash/
