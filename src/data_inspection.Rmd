@@ -1,0 +1,150 @@
+# Data Inspection 
+Data from "Class, Ethnicity, and Cooperation Among Women: Evidence from a Public Goods Experiment in Lebanon" 
+
+## Load packages
+```{r}
+install.packages("pacman")
+pacman::p_load("haven", "tidyverse", "ggplot2")
+```
+
+## Prep and clean data
+### Load data
+```{r}
+pgg3 <- read_dta("../in/dataverse_files/DATA/ORIG/Leb_PGG_3_Clean_FINAL.dta")
+```
+
+### Filter data and select columns
+Keep: women in same class groups
+groups 123 and 219 did not have 6 members 
+- (123 was same-sect C and 219 was mixed-sect C)
+- both missing C were assigned ses = P
+Two rows added with NA values to keep treatment symmetrical
+142 (144) participants in total
+
+```{r}
+pgg3_e <- pgg3 %>% 
+  filter(T_mixed_class == 0 & female == 1) %>% 
+  select(c("pid", "gid", "sect", "ses", "T_mixed_sect", "m_impute", 
+           contains("pgg"))) %>% 
+  select(-c("pgg_prac_prob")) %>% 
+  unique() %>% 
+  na.omit()
+
+#pgg3_e <- pgg3_e %>% 
+ # add_row(pid = 1111, pgg3_e[pgg3_e$gid == 123,][1, 2:18]) %>% 
+  #add_row(pid = 2222, pgg3_e[pgg3_e$gid == 219 & pgg3_e$sect == "C",][1, 2:18])
+#pgg3_e[pgg3_e$pid %in% c(1111, 2222), 6:18] <- NA
+```
+
+### Reformat PGG cols
+```{r}
+pgg3_e1 <- subset(pgg3_e, select = c("pid", str_subset(colnames(pgg3_e), "rd1")))
+pgg3_e1$round <- 1
+colnames(pgg3_e1)[2:6] <- c("contribution", "totalpot", "payout", "kept", "earned")
+pgg3_e2 <- subset(pgg3_e, select = c("pid", str_subset(colnames(pgg3_e), "rd2")))
+pgg3_e2$round <- 2
+colnames(pgg3_e2)[2:6] <- c("contribution", "totalpot", "payout", "kept", "earned")
+pgg3_eD <- subset(pgg3_e, select = c(1:5,10,17))
+pgg3_e12 <- rbind(pgg3_e1, pgg3_e2)
+pgg3_ep <- pgg3_e
+pgg3_e <- merge(pgg3_eD, pgg3_e12)
+
+rm(pgg3_e1, pgg3_e2, pgg3_e12, pgg3_eD)
+```
+
+### Save Data
+```{r}
+pgg_data <- pgg3_ep[c("pid", "ses", "sect", "T_mixed_sect", "pgg_rd1")]
+colnames(pgg_data) <- c("ID", "class", "sect", "treatment", "c")
+pgg_data$SeTr <- paste(pgg_data$sect, pgg_data$treatment, sep = "_")
+pgg_data <- pgg_data[order(pgg_data$SeTr),]
+
+write_csv(pgg_data, "../in/data_clean.csv")
+```
+
+### Summarise data 
+```{r}
+stats1 <- pgg3_e[pgg3_e$round == 1,] %>% 
+  na.omit() %>% 
+  group_by(sect, T_mixed_sect) %>% 
+  summarise(mean = mean(contribution/1000), 
+            sd= sd(contribution/1000), 
+            n = n(), 
+            SE = sd/(sqrt(n)))
+print(stats1)
+stats2 <- pgg3_e[pgg3_e$round == 2,] %>% 
+  na.omit() %>% 
+  group_by(sect, T_mixed_sect) %>% 
+  summarise(mean = mean(contribution/1000), 
+            sd= sd(contribution/1000), 
+            n = n(), 
+            SE = sd/(sqrt(n)))
+print(stats2)
+
+```
+
+
+
+## Visualize Contributions
+
+### Define names for variables
+```{r}
+group.labs <- c("same-sect", "mixed-sect")
+names(group.labs) <- c(0, 1)
+round.labs <- c("Round 1", "Round 2")
+names(round.labs) <- c(1, 2)
+sect.labs <- c("Christian", "Sunni", "Shia")
+names(sect.labs) <- c("C", "S", "Sh")
+```
+
+### BAR-CHART (sect:treatment:round)
+```{r}
+ggplot(pgg3_e) +
+  geom_bar(aes(x = as.factor(contribution), fill = sect), stat = "count", 
+           position = position_dodge2(preserve = "single", padding = 0.3))+
+  scale_fill_viridis_d(option="viridis", labels = sect.labs, name = "Sect")+
+  ylim(0,13)+
+  xlab("Contribution")+
+  theme_minimal()+
+  facet_grid(rows = vars(T_mixed_sect), cols = vars(round), 
+             labeller = labeller(T_mixed_sect = group.labs, round = round.labs))
+```
+
+### BAR-CHART (sect:treatment)
+```{r}
+ggplot(pgg3_e) +
+  geom_bar(aes(x = as.factor(contribution), fill = as.factor(T_mixed_sect)), stat = "count", 
+           position = position_dodge2(preserve = "single", padding = 0.3))+
+  scale_fill_viridis_d(option="viridis", labels = group.labs, name = "Group")+
+  ylim(0,20)+
+  xlab("Contribution")+
+  theme_minimal()+
+  facet_grid(cols = vars(sect), labeller = labeller(sect = sect.labs))
+```
+
+### BOXPLOT (treatment:sect:class:round)
+```{r}
+ggplot(pgg3_e, aes(y = contribution, x = as.factor(T_mixed_sect))) +
+  geom_boxplot(aes(fill = sect), 
+               linewidth = 0.4,
+               show.legend = F)+
+  scale_x_discrete(name = NULL, labels = c("same-sect", "mixed-sect"))+
+  geom_jitter(aes(shape = ses), size=0.9, width = 0.25) +
+  scale_shape_manual(values = c(1,7), 
+                     labels = c("Poor", "Rich"), name = "Class")+
+  scale_fill_viridis_d(option="viridis")+
+  theme_minimal()+
+  facet_grid(cols = vars(sect), rows = vars(round),
+             labeller = labeller(round = round.labs, sect = sect.labs))
+```
+
+### BARCHART mean in round1 (treatment:sect)
+```{r}
+stats1 %>% 
+  ggplot(aes(x = sect, y = mean, fill = as.factor(T_mixed_sect))) +
+  geom_bar(stat = "identity", position = "dodge")+ 
+  scale_x_discrete(name = NULL, labels = sect.labs)+
+  scale_fill_viridis_d(option="viridis", alpha = 0.9,labels = group.labs, name = "Group")+
+  geom_errorbar(aes(ymin = mean-SE, ymax = mean+SE), position = position_dodge2(padding = 0.7),)+
+  theme_minimal()
+```

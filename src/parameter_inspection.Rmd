@@ -1,0 +1,348 @@
+# Parameter and distribution inspection 
+```{r}
+install.packages("pacman")
+devtools::install_github("rpruim/CalvinBayes")
+library("CalvinBayes")
+pacman::p_load("LaplacesDemon")
+
+```
+
+
+# ALPHA: Initial belief about group contribution 
+
+Range: 0-10 (scaled down from: 0-10,000, with intervals of 1000)
+
+Subject level prior: Gamma distribution with shape and rate parameter
+Treatment level priors: shape and rate re-parameterised in terms of mode and standard deviation
+
+So; every sub from a given group has an alpha value drawn from the same gamma distribution (i.e. same mode, sd -> shape and rate)
+
+## Draw Gamma Distributions based on different sd's with mode = 5 and different modes with sd = 1
+```{r}
+n <- 1000
+
+mode <- 5
+sigmas <- seq(0.1, 4, by = 0.4)
+colors <- c("blue", "green", "red", "orange", "purple", "pink", "yellow",
+            "darkgreen", "lightblue", "hotpink")
+#first plot  
+sigma1 <- 0.5
+rate <- (mode + sqrt(mode^2 + 4*(sigma1)^2)) / (2*(sigma1)^2)
+shape <- 1 + (mode * rate)
+plot(density(rgamma(n, shape = shape, rate = rate)), 
+       main = paste("sd = ", sigma1), xlim = c(0, 10), ylim=c(0,1.5))
+#additional plots
+i <- 1
+for (sigma in sigmas){
+  rate <- (mode + sqrt(mode^2 + 4*(sigma)^2)) / (2*(sigma)^2)
+  shape <- 1 + (mode * rate)
+  lines(density(rgamma(n, shape = shape, rate = rate)), 
+       main = paste("sd = ", sigma), col = colors[i], 
+        xlim = c(0, 10), ylim=c(0,1.5))
+  i <- i+1
+}
+legend("topright", fill = colors, legend = paste("sd:", sigmas))
+
+##different modes sigma = 1
+sigma <- 1
+modes <- seq(0.001, 10, by = 1)
+
+colors <- c("blue", "green", "red", "orange", "purple", "pink", "yellow",
+            "darkgreen", "lightblue", "hotpink")
+#first plot  
+mode1 <- 5
+rate <- (mode1 + sqrt(mode1^2 + 4*(sigma)^2)) / (2*(sigma)^2)
+shape <- 1 + (mode1 * rate)
+plot(density(rgamma(n, shape = shape, rate = rate)), 
+       main = paste("mode = ", mode1), xlim = c(0, 10), ylim=c(0,1.5))
+#additional plots
+i <- 1
+for (mode in modes){
+  rate <- (mode + sqrt(mode^2 + 4*(sigma)^2)) / (2*(sigma)^2)
+  shape <- 1 + (mode * rate)
+  lines(density(rgamma(n, shape = shape, rate = rate)), 
+       main = paste("sd = ", sigma), col = colors[i], 
+        xlim = c(0, 10), ylim=c(0,1.5))
+  i <- i+1
+}
+legend("top", fill = colors, legend = paste("mode:", modes), ncol = 4)
+
+##different modes sigma = 1.5
+sigma <- 1.5
+modes <- seq(0.001, 10, by = 1)
+
+colors <- c("blue", "green", "red", "orange", "purple", "pink", "yellow",
+            "darkgreen", "lightblue", "hotpink")
+#first plot  
+mode1 <- 5
+rate <- (mode1 + sqrt(mode1^2 + 4*(sigma)^2)) / (2*(sigma)^2)
+shape <- 1 + (mode1 * rate)
+plot(density(rgamma(n, shape = shape, rate = rate)), 
+       main = paste("mode = ", mode1), xlim = c(0, 10), ylim=c(0,1.5))
+#additional plots
+i <- 1
+for (mode in modes){
+  rate <- (mode + sqrt(mode^2 + 4*(sigma)^2)) / (2*(sigma)^2)
+  shape <- 1 + (mode * rate)
+  lines(density(rgamma(n, shape = shape, rate = rate)), 
+       main = paste("sd = ", sigma), col = colors[i], 
+        xlim = c(0, 10), ylim=c(0,1.5))
+  i <- i+1
+}
+legend("top", fill = colors, legend = paste("mode:", modes), ncol = 4)
+```
+comment: sd of 0.1, allows very little variance when sampling alphas from the dsitribution; it is unlikely that any group of subs will be that similar. sds of ~1.5-3.3 are creats very broad distributions - and are very similar. It seems like it would make sense to allow for sd's between **0.001 and 2**. It also seems most likely that for most groups, the sd will lie closer to the mean of these values, than the edges, why it makes sense to draw sd from a normal distribution with mean = 1 and sd = 1 (truncated at <0.1)
+
+as the possible values to contribute lie between 0 and 10, the mode of the Gamma distribution for sub-level alpha parameter, should lie between these, it is however likely that these values are distributed as the gamma distribution (tendency to lower values - argue!), therefore the mode of the Gamma dist should be sampled from a gamma distribution with mode = 4 (bit below the mid value) and sd 4 (4.03) (allows for high variance). Based on inspection below, the decided on hyperparameters for Gamma is **shape = 2.6 and rate = 0.4**
+
+## Standard Deviation of ALPHA (gamma distribution) 
+```{r}
+plot(density(rnorm(10000, mean = 1, sd = 2))) #sd distribution
+lines(density(rnormp(10000, mean = 1, prec = (1/(2^2)))), col = "red") #sd distribution
+#check that prec = 1/sd^2, fits when sd = 1, meaning prec = 1
+
+#function used to simulate sigma in recov: 
+lines(density(rtruncnorm(10000, a=0.001, b=Inf, mean = 1, sd = 2)), col = "blue")
+```
+
+## Mode of ALPHA (gamma distribution)
+```{r}
+#preliminary mode and sd values: 
+mode <- 4
+sigma <- 4
+#results in rate of 0.405 and shape 2.618
+rate <- (mode + sqrt(mode^2 + 4*(sigma)^2)) / (2*(sigma)^2) #0.405
+shape <- 1 + (mode * rate) #2.618
+#plot this: 
+plot(density(rgamma(1000, shape = shape, rate= rate))) #mode dist
+#check other calculation of rate and shape from same mode and sd: 
+CalvinBayes::gamma_params(mode = mode, sd = sigma, plot = TRUE) #rate = 0.405, shape = 2.618
+
+#test with rounded values for shape and rate:  
+plot(density(rgamma(1000, shape = 2.6, rate= 0.4))) #mode dist
+CalvinBayes::gamma_params(shape = 2.6, rate= 0.4, plot = TRUE) #mode = 4, sd = 4.03
+```
+
+
+# RHO: Contribution matching parameter
+Range: 0-1 (in practice: 0.01 - 0.99 to avoid extreme values in beta function)
+
+subject level prior: Beta distribution with parameters shape1 and shape2 
+treatment level priors: shape parameters for beta dist, re-parameterised in terms of mean and concentration. 
+
+So; every sub from a given group has a rho value drawn from the same beta distribution (i.e. same mean, concentration -> shape and shape)
+
+## Draw Beta Distributions based on different concentrations and means.
+```{r}
+
+#vary sigmas, keep mean at 0.5
+n <- 1000
+mean <- 0.5
+sigmas <- seq(10, 100, 10)
+colors <- c("blue", "green", "red", "orange", "purple", "pink", "yellow",
+            "darkgreen", "lightblue", "hotpink")
+#first plot, beta(1,1) mean = 0.5, conc = 2
+sigma1 <- 2
+shape1<- mean * sigma1
+shape2 <- (1-mean) * sigma1
+
+plot(density(rbeta(n, shape1 = shape1, shape2 = shape2)), 
+       main = paste("conc. = ", sigma1), xlim = c(0,1))
+#additional plots
+i <- 1
+for (sigma in sigmas){
+  shape1<- mean * sigma
+  shape2 <- (1-mean) * sigma
+  lines(density(rbeta(n, shape1 = shape1, shape2 = shape2)), 
+       main = paste("conc. = ", sigma), col = colors[i], xlim = c(0,1))
+  i <- i+1
+}
+legend("topright", fill = colors, legend = paste("conc.:", sigmas))
+
+#Vary sigmas between 1 and 10
+n <- 1000
+mean <- 0.5
+sigmas <- seq(1, 10, 1)
+colors <- c("blue", "green", "red", "orange", "purple", "pink", "yellow",
+            "darkgreen", "lightblue", "hotpink")
+#first plot, beta(1,1) mean = 0.5, conc = 2
+sigma1 <- 2
+shape1<- mean * sigma1
+shape2 <- (1-mean) * sigma1
+
+plot(density(rbeta(n, shape1 = shape1, shape2 = shape2)), 
+       main = paste("conc. = ", sigma1), xlim = c(0,1))
+#additional plots
+i <- 1
+for (sigma in sigmas){
+  shape1<- mean * sigma
+  shape2 <- (1-mean) * sigma
+  lines(density(rbeta(n, shape1 = shape1, shape2 = shape2)), 
+       main = paste("conc. = ", sigma), col = colors[i], xlim = c(0,1))
+  i <- i+1
+}
+legend("topright", fill = colors, legend = paste("conc.:", sigmas))
+
+
+## with varying mean and conc = 2
+sigma <- 2
+means <- seq(0.1, 1, 0.1)
+colors <- c("blue", "green", "red", "orange", "purple", "pink", "yellow",
+            "darkgreen", "lightblue", "hotpink")
+#first plot  
+mean1 <- 0.5
+shape1<- mean1 * sigma
+shape2 <- (1-mean1) * sigma
+
+plot(density(rbeta(n, shape1 = shape1, shape2 = shape2)), 
+       main = paste("mean = ", mean1), xlim = c(0,1))
+#additional plots
+i <- 1
+for (mean in means){
+  shape1<- mean * sigma
+  shape2 <- (1-mean) * sigma
+  lines(density(rbeta(n, shape1 = shape1, shape2 = shape2)), 
+       main = paste("mean = ", sigma), col = colors[i], xlim = c(0,1))
+  i <- i+1
+}
+legend("topright", fill = colors, legend = paste("mean:", means), ncol = 4)
+
+```
+comment: the treatment level mean of the sub level parameter rho, is drawn from beta dist (shape1 and shape2 = 1), with mean 0.5 and conc = 2. with the assumption that the treatment level means follow similar dist as the sub level parameters. 
+the treatment level concentration of the sub level param rho is drawn from a uniform distribution (uniformed prior) with min 2 and max 100. (a conc of 1 creates peaks at 0 and 1. )
+
+
+```{r}
+#distribution of beta(1,1) - prior for mean of rho
+plot(density(rbeta(1000, shape1 = 1, shape2 = 1)))
+beta_params(shape1 = 1, shape2 = 1) #mean  =0.5 conc = 2
+#dsit of uniform(2,100), prior for conc of rho
+plot(density(runif(1000, min = 2, max = 100)))
+
+```
+
+
+
+
+
+# Treatment Comparison: delta
+
+  ### ALPHA priors ###
+  mu_alpha ~ dgamma(2.6, 0.4)T(0.001, 10) #try removing upper truncation of 10 didnt work 
+                                        #try lowering truncation from 0.001 didnt work
+  delta_alpha ~ dnorm(0, 1/16) #variance = 16, sd = 4
+    
+  sigma_alpha_s ~ dnorm(1, 0.25)T(0.001, ) #sd of 2
+  sigma_alpha_m ~ dnorm(1, 0.25)T(0.001, ) #sd of 2
+  
+  ### RHO priors ###
+  mu_rho ~ dbeta(1, 1)T(0.001, 0.999)
+  delta_rho ~ dnorm(0, 1/0.25) #variance = 0.25, sd = 0.5
+  
+  sigma_rho_s ~ dunif(10, 100)
+  sigma_rho_m ~ dunif(10, 100)
+
+  
+```{r}
+plot(density(rnorm(1000, mean = 0, sd = 4))) #delta alpha
+lines(density(rgamma(1000, shape = 2.6, rate = 0.4))) #mu alpha
+
+plot(density(rnorm(1000, mean = 0, sd = 0.5))) #delta rho
+lines(density(rbeta(1000, 1, 1)))
+
+
+```
+
+
+# Extra
+## Rho 
+*Possible values*: 0-1
+*Distribution*: Beta with shape1 and shape2
+*Calculations of hyperparameters*
+  shape1 =  mu_rho * sigma_rho
+  shape2 = (1-mu_rho) * sigma_rho
+  
+*mu_rho* represents the mean of the distribution 
+*sigma_rho* represents certainty (higher sigma will increase the values of the 
+hyperparameters which makes the distribution more narrow ie. certain)
+  
+```{r}
+mu_rho <- runif(1, 0.001, 0.999)
+sigma_rho <- runif(1, 0, 100)
+
+shape1 <-  mu_rho * sigma_rho
+shape2 <-  (1-mu_rho) * sigma_rho
+
+hist(rbeta(1000, shape1, shape2), breaks = 100, 
+     main = paste("mu = ", round(mu_rho, digits = 4), 
+                  ", shape1 = ", round(shape1, digits = 4), 
+                  ", shape2 = ", round(shape2, digits = 4)))
+```
+
+## Alpha
+
+*Possible values*: 0-10 
+*Distribution*: Gamma with shape and rate
+*Calculations of hyperparameters*
+  
+  rate = (mu_alpha + sqrt(mu_alpha^2 + 4* (sigma_alpha)^2)) / (2*(sigma_alpha)^2)
+  shape =  1 + (mu_alpha * rate_a)
+  
+*mu_alpha* represents the mode of the distribution ((shape-1)/rate)
+*sigma_alpha* 
+
+```{r}
+mu_alpha <- runif(1, 0, 10)
+sigma_alpha <- runif(1, 0.1, 10)
+
+rate_a <-  mu_alpha + sqrt(mu_alpha^2 + 4* (sigma_alpha)^2) / (2*(sigma_alpha)^2)
+shape_a <-   1 + (mu_alpha * rate_a)
+
+hist(rgamma(1000, shape = shape_a, rate = rate_a), breaks = 100, 
+     main = paste("mu = ", round(mu_alpha, digits = 4), 
+                  ", sigma = ", round(sigma_alpha, digits = 4),
+                  ", rate = ", round(rate_a, digits = 4), 
+                  ", shape = ", round(shape_a, digits = 4)))
+```
+
+
+
+## Simulation ALPHA & RHO (sd & mean/mode)
+```{r}
+hist(runif(1000, 0, 10), breaks = 100) #mode ALPHA
+hist(runif(1000, 0, 1), breaks = 100) #mean RHO
+
+hist(runif(1000, 1, 10), breaks = 100) #sd ALPHA
+50 #sd RHO
+```
+
+## ALPHA (gamma dist)
+```{r}
+mode <- runif(1, 0, 10)
+sd <- runif(1, 0, 10)
+  
+CalvinBayes::gamma_params(mode = mode, sd = sd, plot = TRUE)
+```
+
+
+```{r}
+CalvinBayes::gamma_params(shape = 1.2, rate = 0.05, plot = TRUE)
+
+CalvinBayes::beta_params(mean = 1, concentration = 1,  plot = T)
+
+#mu_rho * sigma_rho
+#(1-mu_rho) * sigma_rho
+0.4*50 #=20
+(1-0.4)*50 #=30
+```
+
+## JAGS distributions 
+```{r}
+hist(rnorm(1000, mean = 0.5, sd = 2)) #ALPHA mu (prec = 0.01) 1/2^2
+
+hist(rbeta(1000, shape1 = 1, shape2 = 1)) #RHO mu
+
+1/sqrt(rgamma(1, shape = 0.01, rate = 0.01))
+
+```
+

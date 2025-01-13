@@ -1,0 +1,229 @@
+# Posterior Predictive Checks Model-A: Public Goods Game
+
+```{r}
+install.packages("pacman")
+set.seed(42)
+pacman::p_load(R2jags, parallel, polspline, tidyverse, ggplot2)
+setwd("/work/LauraGivskovRahbek#6659/decision_making_exam24/src/model_A")
+source("../utils.R")
+```
+
+## Summary stats from data
+```{r}
+pgg_data <- read_csv("../../in/data_clean.csv")
+stats1 <- pgg_data %>% 
+  group_by(SeTr) %>% 
+  summarise(mean = mean(c/1000), 
+            sd= sd(c/1000), 
+            n = n(), 
+            SE = sd/(sqrt(n)))
+print(stats1)
+par(mfrow=c(2,3))
+for (st in unique(pgg_data$SeTr)){
+  plot(density(pgg_data$c/1000), main = paste("Contribution density:", st))
+}
+
+```
+
+
+## Parameter Estimation
+### Load data and vars
+Each Combination of Sect and Treatment (6 groups)
+
+```{r}
+load("../../out/EstData/est_vars_A.RData") 
+samp_names <- paste0("samp", SeTr)
+for (i in 1:length(file_names)){
+  load(file_names[[i]])
+  assign(paste0(samp_names[i]), samples)
+}
+samples_ls <- list("sampC_0" = sampC_0, "sampC_1" = sampC_1, "sampS_0" = sampS_0, 
+                   "sampS_1" = sampS_1, "sampSh_0" = sampSh_0, "sampSh_1" = sampSh_1)
+param_names <- c("mu_alpha", "sigma_alpha")
+```
+
+### Estimated Parameters
+
+```{r}
+estimated_parameters <- array(NA, dim = c(length(param_names), length(samples_ls)), 
+                              dimnames = list(c(param_names), c(names(samples_ls))))
+for (p in param_names){
+  for (s in 1:length(samples_ls)){
+    estimated_parameters[p, s] <- MPD(samples_ls[[s]]$BUGSoutput$sims.list[[p]])
+  }
+}
+estimated_parameters
+```
+
+### Prior distributions for SECTxTREATMENT
+```{r}
+par(mfrow = c(2,2))
+plot(density(rgamma(1000, 2.6, 0.4)), xlim = c(0.001, 10), main = "Prior: Mu Alpha")
+plot(density(rnorm(1000, 1, 2)), xlim = c(0.001, 10), main = "Prior: Sigma Alpha")
+```
+
+
+###Posterior Distributions for SECTxTREATMENT 
+
+```{r}
+par(mfrow = c(2,3))
+for (p in param_names){
+  for (s in 1:length(samples_ls)){
+    plot(density(samples_ls[[s]]$BUGSoutput$sims.list[[p]]), 
+         main = paste(p, samp_names[s], sep = " - ") )
+  }
+}
+```
+
+
+### Summary Tables (SECTxTREATMENT)
+```{r}
+print("Christian same-sect")
+sampC_0
+print("Christian mixed-sect")
+sampC_1
+print("Sunni same-sect")
+sampS_0
+print("Sunni same-sect")
+sampS_1
+print("Shia same-sect")
+sampSh_0
+print("Shia same-sect")
+sampSh_1
+```
+### Traceplots
+```{r}
+traceplot(sampC_0)
+```
+
+
+```{r}
+traceplot(sampC_1)
+```
+
+
+```{r}
+traceplot(sampS_0)
+```
+
+
+```{r}
+traceplot(sampS_1)
+```
+
+
+```{r}
+traceplot(sampSh_0)
+```
+
+
+```{r}
+traceplot(sampSh_1)
+```
+
+
+
+
+
+
+
+
+## Treatment Comparison 
+
+### Load data
+```{r}
+load("../../out/EstData/est_compare_vars_A.RData") 
+samp_names <- paste0("sampA", sects)
+for (i in 1:length(file_names)){
+  load(file_names[[i]])
+  assign(paste0(samp_names[i]), samples)
+}
+rm(samples, i)
+samples_ls <- list("sampAC" = sampC, "sampAS" = sampS, "sampASh" = sampSh)
+param_names <- c("mu_alpha", "delta_alpha", "sigma_alpha_s", "sigma_alpha_m")
+
+```
+
+
+### Parameters
+```{r}
+comp_parameters <- array(NA, dim = c(length(param_names), length(samples_ls)), 
+                              dimnames = list(c(param_names), c(names(samples_ls))))
+for (p in param_names){
+  for (s in 1:length(samples_ls)){
+    comp_parameters[p, s] <- MPD(samples_ls[[s]]$BUGSoutput$sims.list[[p]])
+  }
+}
+```
+
+### PosteriorXPrior distributions: ALPHA and RHO differences (delta)
+```{r}
+colors <- c("black", "red", "blue", "green")
+mpd_a <- c(round(comp_parameters[2,1:3], digits = 3))
+plot(density(rnorm(1000, 0, 4)), col = colors[1], 
+     ylim = c(0,0.3), main = "delta_alpha")
+lines(density(sampAC$BUGSoutput$sims.list$delta_alpha), col = colors[2])
+lines(density(sampAC$BUGSoutput$sims.list$delta_alpha), col = colors[3])
+lines(density(sampAC$BUGSoutput$sims.list$delta_alpha), col = colors[4])
+legend("topright", fill = colors, 
+       legend = c("prior (mu = 0)", sprintf("sect: %s (%s)", sects, mpd_a)))
+```
+
+
+### PosteriorXPrior distributions: ALPHA (mu) - for each sect 
+```{r}
+
+colors <- c("black", "red", "blue")
+mpd_c <- c(comp_parameters[1,1], comp_parameters[1,1] + comp_parameters[2,1], 
+           comp_parameters[1,1] - comp_parameters[2,1])
+names(mpd_c) <- c("sect_mu", "same_mu", "mixed_mu")
+plot(density(sampAC$BUGSoutput$sims.list$mu_alpha), col = colors[1], main = "C - Mu alpha")
+lines(density(sampAC$BUGSoutput$sims.list$mu_alpha + (sampAC$BUGSoutput$sims.list$delta_alpha/2)), 
+      col = colors[2])
+lines(density(sampAC$BUGSoutput$sims.list$mu_alpha - (sampAC$BUGSoutput$sims.list$delta_alpha/2)), 
+      col = colors[3])
+legend("topright", fill = colors, legend = mpd_c)
+
+mpd_s <- c(comp_parameters[1,2], comp_parameters[1,2] + comp_parameters[2,2], 
+           comp_parameters[1,2] - comp_parameters[2,2])
+names(mpd_s) <- c("sect_mu", "same_mu", "mixed_mu")
+plot(density(sampAS$BUGSoutput$sims.list$mu_alpha), col = colors[1], main = "S - Mu alpha")
+lines(density(sampAS$BUGSoutput$sims.list$mu_alpha + (sampAS$BUGSoutput$sims.list$delta_alpha/2)), 
+      col = colors[2])
+lines(density(sampAS$BUGSoutput$sims.list$mu_alpha - (sampAS$BUGSoutput$sims.list$delta_alpha/2)), 
+      col = colors[3])
+legend("topright", fill = colors, legend = mpd_s)
+
+
+mpd_sh <- c(comp_parameters[1,3], comp_parameters[1,3] + comp_parameters[2,3], 
+           comp_parameters[1,3] - comp_parameters[2,3])
+names(mpd_sh) <- c("sect_mu", "same_mu", "mixed_mu")
+plot(density(sampASh$BUGSoutput$sims.list$mu_alpha), col = colors[1], main = "Sh - Mu alpha")
+lines(density(sampASh$BUGSoutput$sims.list$mu_alpha + (sampASh$BUGSoutput$sims.list$delta_alpha/2)), 
+      col = colors[2])
+lines(density(sampASh$BUGSoutput$sims.list$mu_alpha - (sampASh$BUGSoutput$sims.list$delta_alpha/2)), 
+      col = colors[3])
+legend("topright", fill = colors, legend = mpd_sh)
+
+```
+
+
+
+### Summary Tables (SECTxTREATMENT) compariosn
+```{r}
+print("Christian Comparison")
+sampAC
+print("Sunni Comparison")
+sampAS
+print("Shia Compariosn")
+sampASh
+
+```
+
+```{r}
+traceplot(sampAC, mfrow = c(1,1), ask  =F)
+traceplot(sampAS, mfrow = c(1,1), ask  =F)
+traceplot(sampASh, mfrow = c(1,1), ask  =F)
+```
+
+

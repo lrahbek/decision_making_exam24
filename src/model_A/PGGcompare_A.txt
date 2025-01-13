@@ -1,0 +1,47 @@
+model {
+
+  ### ALPHA priors ###
+  mu_alpha ~ dgamma(2.6, 0.4)T(0.001, 10) #remove 10
+  delta_alpha ~ dnorm(0, 1/16) #variance = 16, sd = 4
+    
+  sigma_alpha_s ~ dnorm(1, 0.25)T(0.001, ) #sd of 2
+  sigma_alpha_m ~ dnorm(1, 0.25)T(0.001, ) #sd of 2
+  
+  #set rho as constant 
+  rho <- 1
+  
+  ### SAME-sect treatment ###
+  mu_alpha_s <- ifelse((mu_alpha + (delta_alpha/2))<=0.001, 0.001, ifelse((mu_alpha + (delta_alpha/2))>10, 10, (mu_alpha + (delta_alpha/2))))
+
+  rate_a_s <- (mu_alpha_s+sqrt(mu_alpha_s^2+4*(sigma_alpha_s)^2))/(2*(sigma_alpha_s)^2)
+  shape_a_s <- 1 + (mu_alpha_s * rate_a_s)
+
+  for (s in 1:nsubs_s){
+    
+    alpha_s[s] ~ dgamma(shape_a_s, rate_a_s)T(0.001, 10)
+
+    Gb_s[s] ~ dpois(alpha_s[s])
+      
+    P_s[s] <- (rho * Gb_s[s])
+    
+    c_s[s] ~ dpois(P_s[s])
+  }
+  
+  
+  ### MIXED-sect treatment ###
+  mu_alpha_m <- ifelse((mu_alpha - (delta_alpha/2))<=0.001, 0.001, ifelse((mu_alpha - (delta_alpha/2))>10, 10, (mu_alpha - (delta_alpha/2))))
+  
+  rate_a_m <- (mu_alpha_m + sqrt(mu_alpha_m^2 + 4*(sigma_alpha_m)^2))/(2*(sigma_alpha_m)^2)
+  shape_a_m <- 1 + (mu_alpha_m * rate_a_m)
+
+  for (s in 1:nsubs_m){
+    
+    alpha_m[s] ~ dgamma(shape_a_m, rate_a_m)T(0.001, 10)
+
+    Gb_m[s] ~ dpois(alpha_m[s])
+      
+    P_m[s] <- (rho * Gb_m[s])
+    
+    c_m[s] ~ dpois(P_m[s])
+  }
+}

@@ -1,0 +1,24 @@
+model {
+
+  # Alpha priors
+  mu_alpha ~ dgamma(2.6, 0.4)T(0.001,10)
+  sigma_alpha ~ dnorm(1, 0.25)T(0.001, )#sd = 2
+
+  # Set rho as constant = 1
+  rho <- 1
+  
+  # Re-parameterise alpha-priors to gamma-hyperparameters
+  rate_a <- (mu_alpha + sqrt(mu_alpha^2 + 4*(sigma_alpha)^2)) / (2*(sigma_alpha)^2)
+  shape_a <- 1 + (mu_alpha * rate_a)
+
+  for (s in 1:nsubs){
+    
+    alpha[s] ~ dgamma(shape_a, rate_a)T(0, 10)
+
+    Gb[s] ~ dpois(alpha[s])
+      
+    P[s] <- (rho * Gb[s])
+    
+    c[s] ~ dpois(P[s])
+  }
+}

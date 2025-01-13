@@ -1,0 +1,74 @@
+model {
+
+  ### ALPHA priors ###
+  mu_alpha ~ dgamma(2.6, 0.4)T(0.001, 10) #remove 10
+  delta_alpha ~ dnorm(0, 1/16) #variance = 16, sd = 4
+    
+  sigma_alpha_s ~ dnorm(1, 0.25)T(0.001, ) #sd of 2
+  sigma_alpha_m ~ dnorm(1, 0.25)T(0.001, ) #sd of 2
+  
+  ### RHO priors ###
+  mu_rho ~ dbeta(1, 1)T(0.001, 0.999)
+  delta_rho ~ dnorm(0, 1/0.25) #variance = 0.25, sd = 0.5
+  
+  sigma_rho_s ~ dunif(10, 100)
+  sigma_rho_m ~ dunif(10, 100)
+
+  
+  ### SAME-sect treatment ###
+  
+  #mu_alpha_s <- mu_alpha + (delta_alpha/2)
+  mu_alpha_s <- ifelse((mu_alpha + (delta_alpha/2))<=0.001, 0.001, ifelse((mu_alpha + (delta_alpha/2))>10, 10, (mu_alpha + (delta_alpha/2))))
+  
+  
+  rate_a_s <- (mu_alpha_s+sqrt(mu_alpha_s^2+4*(sigma_alpha_s)^2))/(2*(sigma_alpha_s)^2)
+  shape_a_s <- 1 + (mu_alpha_s * rate_a_s)
+  
+  #mu_rho_s <- mu_rho + (delta_rho/2)
+  mu_rho_s <- ifelse((mu_rho + (delta_rho/2))<0, 0, (mu_rho + (delta_rho/2)))
+  
+  shape_r1_s <- mu_rho_s * sigma_rho_s
+  shape_r2_s <- (1-mu_rho_s) * sigma_rho_s
+
+  for (s in 1:nsubs_s){
+    
+    alpha_s[s] ~ dgamma(shape_a_s, rate_a_s)T(0.001, 10)
+    rho_s[s] ~ dbeta(shape_r1_s, shape_r2_s)T(0.001, 0.999)  
+
+    Gb_s[s] ~ dpois(alpha_s[s])
+      
+    P_s[s] <- (rho_s[s] * Gb_s[s])
+    
+    c_s[s] ~ dpois(P_s[s])
+  }
+  
+  
+  ### MIXED-sect treatment ###
+  
+  #mu_alpha_m <- mu_alpha - (delta_alpha/2)
+  
+  mu_alpha_m <- ifelse((mu_alpha - (delta_alpha/2))<=0.001, 0.001, ifelse((mu_alpha - (delta_alpha/2))>10, 10, (mu_alpha - (delta_alpha/2))))
+  
+  rate_a_m <- (mu_alpha_m + sqrt(mu_alpha_m^2 + 4*(sigma_alpha_m)^2))/(2*(sigma_alpha_m)^2)
+  shape_a_m <- 1 + (mu_alpha_m * rate_a_m)
+  
+  #mu_rho_m <- mu_rho - (delta_rho/2)
+  
+  mu_rho_m <- ifelse((mu_rho - (delta_rho/2))<0, 0, (mu_rho - (delta_rho/2)))
+
+  
+  shape_r1_m <- mu_rho_m * sigma_rho_m
+  shape_r2_m <- (1-mu_rho_m) * sigma_rho_m
+
+  for (s in 1:nsubs_m){
+    
+    alpha_m[s] ~ dgamma(shape_a_m, rate_a_m)T(0.001, 10)
+    rho_m[s] ~ dbeta(shape_r1_m, shape_r2_m)T(0.001, 0.999) 
+
+    Gb_m[s] ~ dpois(alpha_m[s])
+      
+    P_m[s] <- (rho_m[s] * Gb_m[s])
+    
+    c_m[s] ~ dpois(P_m[s])
+  }
+}
