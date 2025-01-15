@@ -84,6 +84,43 @@ print(stats2)
 ```
 
 
+## Summary stats and plots for ROUND 1
+```{r}
+pgg_data <- read_csv("../in/data_clean.csv")
+
+pgg_data$sect <- ifelse(pgg_data$sect == "C", "Christian", 
+                        ifelse(pgg_data$sect == "S", "Sunni", 
+                               ifelse(pgg_data$sect == "Sh", "Shia", NA)))
+pgg_data$treatment <- ifelse(pgg_data$treatment == 0, "same-sect", 
+                        ifelse(pgg_data$treatment == 1, "mixed-sect", NA))
+
+stats1 <- pgg_data %>% 
+  group_by(sect, treatment) %>% 
+  summarise(mean = mean(c/1000), 
+            sd= sd(c/1000), 
+            n = n(), 
+            SE = sd/(sqrt(n)))
+print(stats1)
+```
+
+
+```{r}
+
+pdf(file = "../out/contribution_density.pdf", width = 10)
+par(mfrow=c(3,4))
+for (st in unique(pgg_data$SeTr)){
+  plot(density(pgg_data$c[pgg_data$SeTr == st]/1000), 
+       main = sprintf("sect: %s \n treatment: %s", pgg_data$sect[pgg_data$SeTr == st][1], 
+                      pgg_data$treatment[pgg_data$SeTr == st][1] ), xlab = "contribution ")
+  hist((pgg_data$c[pgg_data$SeTr == st]/1000), 
+       main = sprintf("sect: %s \n treatment: %s", pgg_data$sect[pgg_data$SeTr == st][1], 
+                      pgg_data$treatment[pgg_data$SeTr == st][1]),
+       breaks = 11, xlab = "contribution")
+  
+}
+dev.off()
+```
+
 
 ## Visualize Contributions
 

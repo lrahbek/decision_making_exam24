@@ -8,25 +8,8 @@ setwd("/work/LauraGivskovRahbek#6659/decision_making_exam24/src/model_A")
 source("../utils.R")
 ```
 
-## Summary stats from data
-```{r}
-pgg_data <- read_csv("../../in/data_clean.csv")
-stats1 <- pgg_data %>% 
-  group_by(SeTr) %>% 
-  summarise(mean = mean(c/1000), 
-            sd= sd(c/1000), 
-            n = n(), 
-            SE = sd/(sqrt(n)))
-print(stats1)
-par(mfrow=c(2,3))
-for (st in unique(pgg_data$SeTr)){
-  plot(density(pgg_data$c/1000), main = paste("Contribution density:", st))
-}
 
-```
-
-
-## Parameter Estimation
+## Parameter Estimation (per group)
 ### Load data and vars
 Each Combination of Sect and Treatment (6 groups)
 
@@ -66,13 +49,16 @@ plot(density(rnorm(1000, 1, 2)), xlim = c(0.001, 10), main = "Prior: Sigma Alpha
 ###Posterior Distributions for SECTxTREATMENT 
 
 ```{r}
-par(mfrow = c(2,3))
+pdf(file = "../../out/A_est_posterior.pdf")
+
+par(mfrow = c(3,3))
 for (p in param_names){
   for (s in 1:length(samples_ls)){
     plot(density(samples_ls[[s]]$BUGSoutput$sims.list[[p]]), 
          main = paste(p, samp_names[s], sep = " - ") )
   }
 }
+dev.off()
 ```
 
 
@@ -90,41 +76,28 @@ print("Shia same-sect")
 sampSh_0
 print("Shia same-sect")
 sampSh_1
+
+#save to folder
+folder_path <- "../../out/posterior_dist_summaries/m_A_est_"
+for (i in 1:length(samples_ls)){
+  path <- str_c(folder_path, sprintf("%s.csv", SeTr[i]))
+  write.csv((samples_ls[[i]]$BUGSoutput$summary), file = path)
+}
 ```
+
+
 ### Traceplots
 ```{r}
-traceplot(sampC_0)
+
+folder_path <-  "../../out/traceplots/m_A_est_"
+
+for (i in 1:length(samples_ls)){
+  path <- str_c(folder_path, sprintf("%s.pdf", SeTr[i]))
+  pdf(file = path)
+  traceplot(samples_ls[[i]], ask = F, mfrow = c(3,1))
+  dev.off()
+}
 ```
-
-
-```{r}
-traceplot(sampC_1)
-```
-
-
-```{r}
-traceplot(sampS_0)
-```
-
-
-```{r}
-traceplot(sampS_1)
-```
-
-
-```{r}
-traceplot(sampSh_0)
-```
-
-
-```{r}
-traceplot(sampSh_1)
-```
-
-
-
-
-
 
 
 
@@ -139,7 +112,7 @@ for (i in 1:length(file_names)){
   assign(paste0(samp_names[i]), samples)
 }
 rm(samples, i)
-samples_ls <- list("sampAC" = sampC, "sampAS" = sampS, "sampASh" = sampSh)
+samples_ls <- list("sampAC" = sampAC, "sampAS" = sampAS, "sampASh" = sampASh)
 param_names <- c("mu_alpha", "delta_alpha", "sigma_alpha_s", "sigma_alpha_m")
 
 ```
@@ -154,25 +127,30 @@ for (p in param_names){
     comp_parameters[p, s] <- MPD(samples_ls[[s]]$BUGSoutput$sims.list[[p]])
   }
 }
+comp_parameters
 ```
 
-### PosteriorXPrior distributions: ALPHA and RHO differences (delta)
+### PosteriorXPrior distributions: ALPHA differences (delta)
 ```{r}
+pdf(file = "../../out/A_comp_postxprior.pdf")
+
 colors <- c("black", "red", "blue", "green")
 mpd_a <- c(round(comp_parameters[2,1:3], digits = 3))
 plot(density(rnorm(1000, 0, 4)), col = colors[1], 
      ylim = c(0,0.3), main = "delta_alpha")
 lines(density(sampAC$BUGSoutput$sims.list$delta_alpha), col = colors[2])
-lines(density(sampAC$BUGSoutput$sims.list$delta_alpha), col = colors[3])
-lines(density(sampAC$BUGSoutput$sims.list$delta_alpha), col = colors[4])
+lines(density(sampAS$BUGSoutput$sims.list$delta_alpha), col = colors[3])
+lines(density(sampASh$BUGSoutput$sims.list$delta_alpha), col = colors[4])
 legend("topright", fill = colors, 
        legend = c("prior (mu = 0)", sprintf("sect: %s (%s)", sects, mpd_a)))
+dev.off()
 ```
 
 
 ### PosteriorXPrior distributions: ALPHA (mu) - for each sect 
 ```{r}
-
+pdf(file = "../../out/A_comp_alpha_dist.pdf")
+par(mfrow = c(3,1))
 colors <- c("black", "red", "blue")
 mpd_c <- c(comp_parameters[1,1], comp_parameters[1,1] + comp_parameters[2,1], 
            comp_parameters[1,1] - comp_parameters[2,1])
@@ -204,7 +182,7 @@ lines(density(sampASh$BUGSoutput$sims.list$mu_alpha + (sampASh$BUGSoutput$sims.l
 lines(density(sampASh$BUGSoutput$sims.list$mu_alpha - (sampASh$BUGSoutput$sims.list$delta_alpha/2)), 
       col = colors[3])
 legend("topright", fill = colors, legend = mpd_sh)
-
+dev.off()
 ```
 
 
@@ -218,12 +196,64 @@ sampAS
 print("Shia Compariosn")
 sampASh
 
+#save to folder
+folder_path <- "../../out/posterior_dist_summaries/m_A_comp_"
+for (i in 1:length(samples_ls)){
+  path <- str_c(folder_path, sprintf("%s.csv", sects[i]))
+  write.csv((samples_ls[[i]]$BUGSoutput$summary), file = path)
+}
+```
+
+### Create dataframe with means and 95% CIS for plotting
+```{r}
+As_sum <- as.data.frame(round(sampAS$BUGSoutput$summary, digits = 3))
+As_sum$var <- rownames(As_sum)
+As_sum <- As_sum[c(1,3:5),c(1,3,5,7,8:10)]
+As_sum$sect <- "Sunni" 
+
+Ac_sum <- as.data.frame(round(sampAC$BUGSoutput$summary, digits = 3))
+Ac_sum$var <- rownames(Ac_sum)
+Ac_sum <- Ac_sum[c(1,3:5),c(1,3,5,7,8:10)]
+Ac_sum$sect <- "Christian" 
+
+Ash_sum <- as.data.frame(round(sampASh$BUGSoutput$summary, digits = 3))
+
+Ash_sum$var <- rownames(Ash_sum)
+Ash_sum <- Ash_sum[c(1,3:5), c(1,3,5,7,8:10)]
+Ash_sum$sect <- "Shia" 
+
+A_summary <- rbind(Ac_sum, As_sum, Ash_sum)
+
+As_sum
+
 ```
 
 ```{r}
-traceplot(sampAC, mfrow = c(1,1), ask  =F)
-traceplot(sampAS, mfrow = c(1,1), ask  =F)
-traceplot(sampASh, mfrow = c(1,1), ask  =F)
+
+ggplot(data = A_summary, aes(x = mean, y = sect)) + 
+  geom_segment(aes(x = `2.5%`, xend = `97.5%`, yend = sect)) + 
+  geom_point() + 
+  facet_wrap(vars(var) , scales = "free", nrow = 4)+
+  xlab("")+ylab("")+
+  theme_minimal()
+ggsave("../../out/A_summary_plot.png", width = 3.5, height = 4.32)
+
+```
+
+### Traceplots
+```{r}
+traceplot(sampAC, ask = F)
+traceplot(sampAS, ask = F)
+traceplot(sampASh, ask = F)
+
+folder_path <-  "../../out/traceplots/m_A_comp_"
+
+for (i in 1:length(samples_ls)){
+  path <- str_c(folder_path, sprintf("%s.pdf", sects[i]))
+  pdf(file = path)
+  traceplot(samples_ls[[i]], ask = F, mfrow = c(3,1))
+  dev.off()
+}
 ```
 
 

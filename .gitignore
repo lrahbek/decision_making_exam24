@@ -51,6 +51,7 @@ rsconnect/
 #own additions 
 in/
 !in/.gitkeep 
+!in/summary_stats1.csv
 out/EstData
 out/RData
 trash/

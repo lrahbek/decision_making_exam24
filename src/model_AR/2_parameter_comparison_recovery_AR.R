@@ -2,7 +2,7 @@
 install.packages("pacman")
 set.seed(42)
 pacman::p_load(R2jags, parallel, polspline, tidyverse,ggplot2, 
-               extraDistr, ggpubr, truncnorm, cascsim)
+               extraDistr, ggpubr, truncnorm)
 setwd("/work/LauraGivskovRahbek#6659/decision_making_exam24/src/model_AR")
 source("../sim_functions.R")
 source("../utils.R")
